@@ -1,1 +1,1 @@
-# amazon-scraper
+# Amazon Review Profile Scraper
