@@ -1,8 +1,9 @@
-import math
 import os
-
+import math
+import openpyxl
 import requests
 import pandas as pd
+
 from tabulate import tabulate
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -42,7 +43,7 @@ def scrape_reviews(review_cards, reviews):
         profile_link = card.find("a", class_='a-profile')
         a_row = card.find("div", class_="a-row")
         name = a_row.find("span", class_="a-profile-name").text.strip()
-        rating = a_row.find("span", class_="a-icon-alt").text.split(" ")[0]
+        rating = float(a_row.find("span", class_="a-icon-alt").text.split(" ")[0])
         review_title = a_row.find(attrs={'data-hook': 'review-title'}).find("span").text.strip()
         review_body = a_row.find("span", {'data-hook': 'review-body'}).find("span").text.strip()
         review_date_and_location = a_row.find("span", {'data-hook': 'review-date'}).text.strip()
@@ -109,8 +110,8 @@ def main():
     print("Scraping Finished, converting data into cool tabular view...")
     df = pd.DataFrame(reviews)
     print(tabulate(df, headers='keys', tablefmt='github'))
-    os.makedirs('csv', exist_ok=True)
-    df.to_csv('csv/out.csv', index=False)
+    os.makedirs('data', exist_ok=True)
+    df.to_excel('data/out.xlsx', index=False)
 
 
 # Press the green button in the gutter to run the script.
