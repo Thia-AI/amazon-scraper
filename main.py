@@ -1,4 +1,5 @@
 import math
+import os
 
 import requests
 import pandas as pd
@@ -61,9 +62,9 @@ def scrape_reviews(review_cards, reviews):
                 occupation = occupation_and_location.text.split(' | ')[0]
                 review_location = occupation_and_location.text.split(' | ')[1]
 
-        review = {'Name': name, 'Location': review_location, 'Occupation': occupation, 'Rating': rating,
+        review = {'Name': name, 'Location': review_location, 'Rating': rating, 'Date': review_date,
+                  'Occupation': occupation,
                   'Title': review_title,
-                  'Date': review_date,
                   'Body': review_body}
 
         reviews.append(review)
@@ -108,6 +109,8 @@ def main():
     print("Scraping Finished, converting data into cool tabular view...")
     df = pd.DataFrame(reviews)
     print(tabulate(df, headers='keys', tablefmt='github'))
+    os.makedirs('csv', exist_ok=True)
+    df.to_csv('csv/out.csv', index=False)
 
 
 # Press the green button in the gutter to run the script.
