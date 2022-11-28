@@ -6,30 +6,30 @@ import pandas as pd
 
 from tabulate import tabulate
 from bs4 import BeautifulSoup
-from selenium import webdriver
+# from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+import undetected_chromedriver as webdriver;
 
 MAX_REVIEWS_PAGES_PER_PRODUCT = 10;
 
 baseURL = "https://www.amazon.ca"
 headers = ({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.157 Safari/537.36',
-    'Accept-Language': 'en-US, en;q=0.5'});
+    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36',
+    'Accept-Language': 'en-US, en;q=0.5'})
 
+options = webdriver.ChromeOptions()
+options.add_argument('--ignore-certificate-errors')
+options.add_argument('--incognito')
+# options.add_argument('--headless')
+diver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 def scrape_page(url):
+    print("scraping: ", url)
     page = requests.get(url, headers=headers)
     soup = BeautifulSoup(page.content, "html.parser")
     return soup;
-
-
 def scrape_rendered_page(url):
-    options = webdriver.ChromeOptions()
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--incognito')
-    options.add_argument('--headless')
-    diver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
     diver.get(url)
     # time.sleep(1)
     html = diver.page_source
@@ -49,22 +49,28 @@ def scrape_reviews(review_cards, reviews):
         review_date_and_location = a_row.find("span", {'data-hook': 'review-date'}).text.strip()
         review_date = review_date_and_location.split(" on ")[1]
         review_location = review_date_and_location.split(" in ")[1].split(" on ")[0]
-        occupation = ""
+        location_and_or_occupation = ""
 
         if profile_link:
             print("Performing rendered profile scrape...")
             profile_url = baseURL + profile_link['href']
             profile_page = scrape_rendered_page(profile_url)
             profile_card = profile_page.find(id="profile_v5")
-            name = profile_card.find("span", class_="a-size-extra-large").text.strip()
+            name = profile_card.find("span", class_="a-size-extra-large")
+            name = name.text.strip() if name else ""
             occupation_and_location = profile_card.find("span", class_="a-size-base a-color-base")
 
             if (occupation_and_location):
-                occupation = occupation_and_location.text.split(' | ')[0]
-                review_location = occupation_and_location.text.split(' | ')[1]
+                location_and_or_occupation = occupation_and_location
+                # seperator = " | "
+                # if seperator in occupation_and_location:
+                #     occupation = occupation_and_location.text.split(' | ')[0]
+                #     profile_location = occupation_and_location.text.split(' | ')[1]
+                # else:
+                #     profile_location = occupation_and_location
 
         review = {'Name': name, 'Location': review_location, 'Rating': rating, 'Date': review_date,
-                  'Occupation': occupation,
+                  'Occupation and or location': location_and_or_occupation,
                   'Title': review_title,
                   'Body': review_body}
 
@@ -72,11 +78,15 @@ def scrape_reviews(review_cards, reviews):
     return reviews
 
 
-def main():
+def get_urls():
+    df = pd.read_csv('data/in.csv', header=None)
+    return df.values
+
+
+def scrape_product(url, reviews):
     try:
-        url = "https://www.amazon.ca/dp/1789955750/ref=sspa_dk_detail_3?psc=1&pd_rd_i=1789955750&pd_rd_w=ysA69&content-id=amzn1.sym.c7dca932-da6a-44fc-af09-cc68d2449b34&pf_rd_p=c7dca932-da6a-44fc-af09-cc68d2449b34&pf_rd_r=BC37YMSSJZ77JTMS3HA3&pd_rd_wg=utjBQ&pd_rd_r=a58b079a-8110-4850-a1c3-c5da0ad68ba1&s=books&sp_csd=d2lkZ2V0TmFtZT1zcF9kZXRhaWw"
         print("Scraping product page for reviews list page...  ", url)
-        soup = scrape_page(url)
+        soup = scrape_rendered_page(url)
 
         results = soup.find(id="cr-pagination-footer-0")
         print("Reviews list page found")
@@ -88,7 +98,7 @@ def main():
         return 0
 
     print("Scraping reviews list page...")
-    soup2 = scrape_page(new_url)
+    soup2 = scrape_rendered_page(new_url)
 
     # find number of pages to scrape in reviews list, maximum 10 pages (100 reviews)
     total_num_reviews = \
@@ -98,20 +108,31 @@ def main():
         total_num_reviews / MAX_REVIEWS_PAGES_PER_PRODUCT) if total_num_reviews < MAX_REVIEWS_PAGES_PER_PRODUCT * 10 else 10
 
     # go through the review pages and scrape the review data
-    reviews = []
     for page_number in range(1, number_of_review_pages_to_scrape + 1):
         pageUrl = new_url + '&pageNumber=' + str(page_number)
-        print("Scaping page number ", page_number, "...   ", pageUrl)
-        soup3 = scrape_page(pageUrl)
+        print("Scraping page number ", page_number, "...   ", pageUrl)
+        soup3 = scrape_rendered_page(pageUrl)
         review_list = soup3.find(id="cm_cr-review_list")
         review_cards = review_list.find_all("div", {'data-hook': 'review'})
         reviews = scrape_reviews(review_cards, reviews)
 
-    print("Scraping Finished, converting data into cool tabular view...")
-    df = pd.DataFrame(reviews)
-    print(tabulate(df, headers='keys', tablefmt='github'))
-    os.makedirs('data', exist_ok=True)
-    df.to_excel('data/out.xlsx', index=False)
+    return reviews
+
+
+def main():
+    urls = get_urls()
+    reviews = []
+
+    try:
+        for url in urls:
+            print("url", url[0])
+            reviews = scrape_product(url[0], reviews)
+    finally:
+        print("Scraping Finished, converting data into cool tabular view...")
+        df = pd.DataFrame(reviews)
+        print(tabulate(df, headers='keys', tablefmt='github'))
+        os.makedirs('data', exist_ok=True)
+        df.to_excel('data/out.xlsx', index=False)
 
 
 # Press the green button in the gutter to run the script.
